@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -37,29 +38,32 @@ var (
 
 func init() {
 	var err error
-	programIco, err = walk.Resources.Image("favicon.ico")
+	resources := walk.Resources
+	_ = resources.SetRootDirPath("C:\\ProgramData\\hs_script\\resource")
+	programIco, err = resources.Image("favicon.png")
 	if err != nil {
-		log.Println("favicon.ico读取失败")
+		log.Println("favicon.png读取失败")
 	}
 }
 
 func ShowWindow() {
 	args := os.Args
-	if len(args) < 4 {
-		return
-	}
 	for i, arg := range args {
 		if strings.HasPrefix(arg, "--") {
 			split := strings.Split(arg, "=")
 			if i != 0 && len(split) > 1 {
 				if split[0] == "--target" {
-					target = split[1]
+					target = strings.Trim(split[1], "\"")
+					target = strings.Trim(split[1], "'")
 				} else if split[0] == "--source" {
-					source = split[1]
+					source = strings.Trim(split[1], "\"")
+					source = strings.Trim(split[1], "'")
 				} else if split[0] == "--pause" {
-					pause = split[1]
+					pause = strings.Trim(split[1], "\"")
+					pause = strings.Trim(split[1], "'")
 				} else if split[0] == "--pid" {
-					pid = split[1]
+					pid = strings.Trim(split[1], "\"")
+					pid = strings.Trim(split[1], "'")
 				}
 			}
 		}
@@ -106,9 +110,9 @@ func ShowWindow() {
 				},
 			},
 		}.Create()
-		pid = "12345"
 		if err != nil {
 			log.Println(err)
+			statusChan <- 0
 			return
 		}
 		go execUpdate()
@@ -121,26 +125,55 @@ func execUpdate() {
 	if pid != "" {
 		appendLog("开始关闭" + sourceProgramName)
 		_ = util.KillProcess(pid)
-		time.Sleep(time.Millisecond * 500)
+		time.Sleep(time.Millisecond * 1000)
 		appendLog("已关闭" + sourceProgramName)
 		mw.progressBar.SetValue(mw.progressBar.Value() + 5)
 	}
+	appendLog("==========》开始删除无用文件《==========")
+	delJarFile()
 	appendLog("==========》开始复制更新文件《==========")
 	_ = util.CopyDirectory(source, target, mw.progressBar, func(log string) {
 		appendLog(log)
-	})
+	}, 90)
 	appendLog("==========》复制更新文件完毕《==========")
+	if strings.Contains(source, "new_version_temp") {
+		appendLog("删除版本文件 " + source)
+		err := os.RemoveAll(source)
+		mw.progressBar.SetValue(mw.progressBar.Value() + 5)
+		if err != nil {
+			log.Println("Error:", err)
+		}
+	}
 	appendLog("==========》开始启动" + sourceProgramName + "《==========")
-	sourceProgramPath := source + "/" + sourceProgramName + ".exe"
-	exists := util.FileExists(sourceProgramName)
+	sourceProgramPath := target + "/" + sourceProgramName + ".exe"
+	exists := util.FileExists(sourceProgramPath)
 	if exists {
 		_ = exec.Command(sourceProgramPath, "--pause="+pause).Run()
 		appendLog("==========》" + sourceProgramName + "启动完毕《==========")
 	} else {
-		appendLog("启动失败，未找到" + sourceProgramName)
+		appendLog("启动失败，未找到" + sourceProgramPath)
 	}
 	mw.progressBar.SetValue(100)
+	closeTime := 10
+	for i := range closeTime {
+		appendLog(strconv.Itoa(closeTime-i) + "秒后关闭本程序")
+		time.Sleep(time.Second * 1)
+	}
 	statusChan <- 0
+}
+
+func delJarFile() {
+	if util.FileExists(target + "/" + sourceProgramName + ".exe") {
+		appendLog("==========》开始删除旧依赖文件《==========")
+		err := util.DeleteJarFiles(target, func(log string) {
+			appendLog(log)
+		})
+		time.Sleep(time.Millisecond * 1000)
+		mw.progressBar.SetValue(mw.progressBar.Value() + 20)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 }
 
 /*
