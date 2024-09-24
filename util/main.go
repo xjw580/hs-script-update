@@ -52,7 +52,7 @@ func CopyDirectory(sourceDir, targetDir string, progress *walk.ProgressBar, appe
 	if fileCount <= 0 {
 		fileCount = 1
 	}
-	step := (maxProgressValue - progress.Value()) / fileCount
+	step := max((maxProgressValue-progress.Value())/fileCount, 1)
 	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -112,7 +112,8 @@ func CountFilesInDirectory(dirPath string) (int, error) {
 	return fileCount, nil
 }
 
-func DeleteLibFiles(folderPath, excludePath string, appendLog func(log string)) error {
+func DeleteLibFiles(folderPath, excludePath string, progress *walk.ProgressBar, appendLog func(log string), maxProgressValue int) error {
+	step := max((maxProgressValue-progress.Value())/100, 1)
 	err := filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -122,6 +123,7 @@ func DeleteLibFiles(folderPath, excludePath string, appendLog func(log string)) 
 			if err != nil {
 				return err
 			}
+			progress.SetValue(min(maxProgressValue, progress.Value()+step))
 			appendLog("删除文件 " + path)
 		}
 		return nil

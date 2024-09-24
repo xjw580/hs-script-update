@@ -131,7 +131,7 @@ func execUpdate() {
 		mw.progressBar.SetValue(mw.progressBar.Value() + 5)
 	}
 	appendLog("==========》开始删除无用文件《==========")
-	delLibFile()
+	delLibFile(mw.progressBar, 50)
 	appendLog("==========》开始复制更新文件《==========")
 	_ = util.CopyDirectory(source, target, mw.progressBar, func(log string) {
 		appendLog(log)
@@ -163,12 +163,12 @@ func execUpdate() {
 	statusChan <- 0
 }
 
-func delLibFile() {
+func delLibFile(progress *walk.ProgressBar, maxProgressValue int) {
 	if util.FileExists(target + "/" + sourceProgramName + ".exe") {
 		appendLog("==========》开始删除旧依赖文件《==========")
-		err := util.DeleteLibFiles(target, filepath.Base(source), func(log string) {
+		err := util.DeleteLibFiles(target, filepath.Base(source), progress, func(log string) {
 			appendLog(log)
-		})
+		}, maxProgressValue)
 		time.Sleep(time.Millisecond * 1000)
 		mw.progressBar.SetValue(mw.progressBar.Value() + 20)
 		if err != nil {
