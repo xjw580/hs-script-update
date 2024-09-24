@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -130,20 +131,20 @@ func execUpdate() {
 		mw.progressBar.SetValue(mw.progressBar.Value() + 5)
 	}
 	appendLog("==========》开始删除无用文件《==========")
-	delJarFile()
+	delLibFile()
 	appendLog("==========》开始复制更新文件《==========")
 	_ = util.CopyDirectory(source, target, mw.progressBar, func(log string) {
 		appendLog(log)
 	}, 90)
 	appendLog("==========》复制更新文件完毕《==========")
-	if strings.Contains(source, "new_version_temp") {
-		appendLog("删除版本文件 " + source)
-		err := os.RemoveAll(source)
-		mw.progressBar.SetValue(mw.progressBar.Value() + 5)
-		if err != nil {
-			log.Println("Error:", err)
-		}
-	}
+	//if strings.Contains(source, "new_version_temp") {
+	//	appendLog("删除版本文件 " + source)
+	//	err := os.RemoveAll(source)
+	//	mw.progressBar.SetValue(mw.progressBar.Value() + 5)
+	//	if err != nil {
+	//		log.Println("Error:", err)
+	//	}
+	//}
 	appendLog("==========》开始启动" + sourceProgramName + "《==========")
 	sourceProgramPath := target + "/" + sourceProgramName + ".exe"
 	exists := util.FileExists(sourceProgramPath)
@@ -154,7 +155,7 @@ func execUpdate() {
 		appendLog("启动失败，未找到" + sourceProgramPath)
 	}
 	mw.progressBar.SetValue(100)
-	closeTime := 10
+	closeTime := 3
 	for i := range closeTime {
 		appendLog(strconv.Itoa(closeTime-i) + "秒后关闭本程序")
 		time.Sleep(time.Second * 1)
@@ -162,10 +163,10 @@ func execUpdate() {
 	statusChan <- 0
 }
 
-func delJarFile() {
+func delLibFile() {
 	if util.FileExists(target + "/" + sourceProgramName + ".exe") {
 		appendLog("==========》开始删除旧依赖文件《==========")
-		err := util.DeleteJarFiles(target, func(log string) {
+		err := util.DeleteLibFiles(target, filepath.Base(source), func(log string) {
 			appendLog(log)
 		})
 		time.Sleep(time.Millisecond * 1000)

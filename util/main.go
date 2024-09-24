@@ -77,7 +77,7 @@ func CopyDirectory(sourceDir, targetDir string, progress *walk.ProgressBar, appe
 			appendLog("创建文件夹 " + dstDirPath)
 		}
 		//忽略文件
-		if strings.HasSuffix(dstPath, "update.exe") || strings.HasSuffix(dstPath, ".flag") {
+		if strings.HasSuffix(dstPath, ".flag") {
 			appendLog("跳过复制文件 " + path)
 		} else {
 			if err := copyFile(path, dstPath); err != nil {
@@ -112,12 +112,12 @@ func CountFilesInDirectory(dirPath string) (int, error) {
 	return fileCount, nil
 }
 
-func DeleteJarFiles(folderPath string, appendLog func(log string)) error {
+func DeleteLibFiles(folderPath, excludePath string, appendLog func(log string)) error {
 	err := filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && strings.HasSuffix(info.Name(), ".jar") && !strings.Contains(path, "new_version_temp") {
+		if !info.IsDir() && (strings.HasSuffix(info.Name(), ".jar") || strings.HasSuffix(info.Name(), ".dll")) && !strings.Contains(path, excludePath) && !strings.Contains(path, "plugin") {
 			err := os.Remove(path)
 			if err != nil {
 				return err
