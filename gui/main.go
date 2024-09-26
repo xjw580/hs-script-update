@@ -24,30 +24,21 @@ const (
 	sourceProgramName = "hs-script"
 	programName       = sourceProgramName + "更新程序"
 	winWidth          = 600
-	winHeight         = 300
+	winHeight         = 400
+	defaultVersionDir = "new_version_temp"
 )
 
 var (
-	mw         = new(MyWindow)
-	programIco walk.Image
-	target     string
-	source     string
-	pause      string
-	pid        string
-	statusChan chan int
+	mw             = new(MyWindow)
+	target         string
+	source         string
+	pause          string
+	pid            string
+	statusChan     chan int
+	versionZipFile string
 )
 
-func init() {
-	var err error
-	resources := walk.Resources
-	_ = resources.SetRootDirPath("C:\\ProgramData\\hs_script\\resource")
-	programIco, err = resources.Image("favicon.png")
-	if err != nil {
-		log.Println("favicon.png读取失败")
-	}
-}
-
-func ShowWindow() {
+func argsCheck() bool {
 	args := os.Args
 	for i, arg := range args {
 		if strings.HasPrefix(arg, "--") {
@@ -69,15 +60,54 @@ func ShowWindow() {
 			}
 		}
 	}
-	if target == "" || source == "" {
-		log.Println("ERROR: target或source参数为空")
-		return
+	if target == "" {
+		executable, _ := os.Executable()
+		target = filepath.Dir(executable)
 	}
+	if source == "" {
+		executable, _ := os.Executable()
+		currentDir := filepath.Dir(executable)
+		versionDir := filepath.Join(currentDir, defaultVersionDir)
+		s, err := os.Stat(versionDir)
+		if err == nil && s.IsDir() {
+			source = versionDir
+		} else {
+			err = filepath.Walk(currentDir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if path == currentDir {
+					return nil
+				}
+
+				if info.IsDir() {
+					return filepath.SkipDir // 跳过子目录
+				}
+				if strings.HasSuffix(info.Name(), ".zip") {
+					versionZipFile = info.Name()
+				}
+				return nil
+			})
+			if versionZipFile == "" {
+				return false
+			}
+			zipFilePath := filepath.Join(currentDir, versionZipFile)
+			err := util.Unzip(zipFilePath, versionDir)
+			if err != nil {
+				return false
+			}
+			source = versionDir
+			return true
+		}
+	}
+	return true
+}
+
+func ShowWindow() {
 	statusChan = make(chan int, 3)
 	go func() {
 		err := MainWindow{
 			Title:    programName,
-			Icon:     programIco,
 			AssignTo: &mw.mainWin,
 			Bounds: Rectangle{
 				X:      int(getDisplayWidth()-winWidth) >> 1,
@@ -116,7 +146,13 @@ func ShowWindow() {
 			statusChan <- 0
 			return
 		}
-		go execUpdate()
+		go func() {
+			if !argsCheck() {
+				statusChan <- 0
+				return
+			}
+			execUpdate()
+		}()
 		mw.mainWin.Run()
 	}()
 	<-statusChan
@@ -155,7 +191,7 @@ func execUpdate() {
 		appendLog("启动失败，未找到" + sourceProgramPath)
 	}
 	mw.progressBar.SetValue(100)
-	closeTime := 3
+	closeTime := 5
 	for i := range closeTime {
 		appendLog(strconv.Itoa(closeTime-i) + "秒后关闭本程序")
 		time.Sleep(time.Second * 1)

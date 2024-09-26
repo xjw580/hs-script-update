@@ -1,6 +1,7 @@
 package util
 
 import (
+	"archive/zip"
 	"github.com/lxn/walk"
 	"io"
 	"os"
@@ -130,6 +131,51 @@ func DeleteLibFiles(folderPath, excludePath string, progress *walk.ProgressBar, 
 	})
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func Unzip(zipFilePath string, destination string) error {
+	// 打开 ZIP 文件
+	zipFile, err := zip.OpenReader(zipFilePath)
+	if err != nil {
+		return err
+	}
+	defer zipFile.Close()
+
+	// 创建目标目录
+	os.MkdirAll(destination, os.ModePerm)
+
+	// 遍历 ZIP 文件中的每个文件
+	for _, file := range zipFile.File {
+		// 构造目标文件的完整路径
+		filePath := filepath.Join(destination, file.Name)
+
+		// 检查是否是目录
+		if file.FileInfo().IsDir() {
+			os.MkdirAll(filePath, os.ModePerm)
+			continue
+		}
+
+		// 创建目标文件
+		outFile, err := os.Create(filePath)
+		if err != nil {
+			return err
+		}
+		defer outFile.Close()
+
+		// 打开 ZIP 文件中的文件
+		rc, err := file.Open()
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+
+		// 复制内容到目标文件
+		_, err = io.Copy(outFile, rc)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

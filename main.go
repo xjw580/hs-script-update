@@ -11,7 +11,7 @@ import (
 func main() {
 	tempDir := os.TempDir()
 	executable, _ := os.Executable()
-	if filepath.Clean(filepath.Dir(executable)) == filepath.Clean(tempDir) {
+	if filepath.Clean(filepath.Dir(executable)) == filepath.Clean(tempDir) || len(os.Args) == 1 {
 		gui.ShowWindow()
 	} else {
 		executable, _ := os.Executable()
