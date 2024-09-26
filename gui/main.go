@@ -69,8 +69,8 @@ func argsCheck() bool {
 		currentDir := filepath.Dir(executable)
 		versionDir := filepath.Join(currentDir, defaultVersionDir)
 		s, err := os.Stat(versionDir)
-		if err == nil && s.IsDir() {
-			source = versionDir
+		if err == nil && s.IsDir() && getNewestSubdirectory(versionDir) != "" {
+			source = getNewestSubdirectory(versionDir)
 		} else {
 			err = filepath.Walk(currentDir, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
@@ -92,15 +92,44 @@ func argsCheck() bool {
 				return false
 			}
 			zipFilePath := filepath.Join(currentDir, versionZipFile)
-			err := util.Unzip(zipFilePath, versionDir)
+			fileName := filepath.Base(zipFilePath)
+
+			// 去掉文件后缀
+			nameWithoutExt := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+			source = filepath.Join(versionDir, nameWithoutExt)
+			err := util.Unzip(zipFilePath, source)
 			if err != nil {
+				source = ""
 				return false
 			}
-			source = versionDir
 			return true
 		}
 	}
 	return true
+}
+
+func getNewestSubdirectory(dirPath string) string {
+	var newestDir string
+	var latestTime int64
+
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// 检查是否是目录且不是根目录
+		if info.IsDir() && path != dirPath {
+			if info.ModTime().Unix() > latestTime {
+				latestTime = info.ModTime().Unix()
+				newestDir = path
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return ""
+	}
+	return newestDir
 }
 
 func ShowWindow() {
