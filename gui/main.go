@@ -220,8 +220,11 @@ func execUpdate() {
 		appendLog("启动失败，未找到" + sourceProgramPath)
 	}
 	mw.progressBar.SetValue(100)
-	closeTime := 5
+	closeTime := 10
 	for i := range closeTime {
+		if !mw.mainWin.Visible() {
+			break
+		}
 		appendLog(strconv.Itoa(closeTime-i) + "秒后关闭本程序")
 		time.Sleep(time.Second * 1)
 	}

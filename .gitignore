@@ -26,7 +26,7 @@ build/
 ### VS Code ###
 .vscode/
 
-*.exe
+update.exe
 *.xml
 *.json
 /easy-release_static/*.json
