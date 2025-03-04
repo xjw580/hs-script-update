@@ -2,6 +2,7 @@ package gui
 
 import (
 	"Hearthstone-Script-update/util"
+	"fmt"
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"log"
@@ -219,6 +220,9 @@ func execUpdate() {
 	} else {
 		appendLog("启动失败，未找到" + sourceProgramPath)
 	}
+	if strings.Contains(source, defaultVersionDir) {
+		os.RemoveAll(source)
+	}
 	mw.progressBar.SetValue(100)
 	closeTime := 10
 	for i := range closeTime {
@@ -226,7 +230,7 @@ func execUpdate() {
 			break
 		}
 		appendLog(strconv.Itoa(closeTime-i) + "秒后关闭本程序")
-		time.Sleep(time.Second * 1)
+		fmt.Println(i)
 	}
 	statusChan <- 0
 }
