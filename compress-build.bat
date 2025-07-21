@@ -1,0 +1,1 @@
+go build -ldflags="-s -w -H=windowsgui"  -o update.exe && upx.exe -9 update.exe
