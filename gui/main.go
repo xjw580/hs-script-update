@@ -196,8 +196,9 @@ func execUpdate() {
 		appendLog("已关闭" + sourceProgramName)
 		mw.progressBar.SetValue(mw.progressBar.Value() + 5)
 	}
-	appendLog("==========》开始删除无用文件《==========")
+	appendLog("==========》开始删除旧依赖文件《==========")
 	delLibFile(mw.progressBar, 50)
+	appendLog("==========》删除旧依赖文件完毕《==========")
 	appendLog("==========》开始复制更新文件《==========")
 	_ = util.CopyDirectory(source, target, mw.progressBar, func(log string) {
 		appendLog(log)

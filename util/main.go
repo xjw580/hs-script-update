@@ -119,13 +119,17 @@ func DeleteLibFiles(folderPath, excludePath string, progress *walk.ProgressBar, 
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && (strings.HasSuffix(info.Name(), ".jar") || strings.HasSuffix(info.Name(), ".dll")) && !strings.Contains(path, excludePath) && !strings.Contains(path, "plugin") {
-			err := os.Remove(path)
-			if err != nil {
-				return err
+		if !info.IsDir() && (strings.HasSuffix(info.Name(), ".jar") || strings.HasSuffix(info.Name(), ".dll")) {
+			if strings.Contains(path, excludePath) || strings.Contains(path, "plugin") {
+				appendLog("跳过删除文件 " + path)
+			} else {
+				err := os.Remove(path)
+				if err != nil {
+					return err
+				}
+				progress.SetValue(min(maxProgressValue, progress.Value()+step))
+				appendLog("删除文件 " + path)
 			}
-			progress.SetValue(min(maxProgressValue, progress.Value()+step))
-			appendLog("删除文件 " + path)
 		}
 		return nil
 	})
