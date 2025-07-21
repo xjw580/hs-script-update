@@ -4,27 +4,29 @@ import (
 	"fmt"
 	"hs-script-update/config"
 	"hs-script-update/updater"
-	"hs-script-update/utils"
 	"log"
 	"os"
+	"os/exec"
+	"time"
 )
 
 func main() {
 	// 初始化日志
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	// 检查是否是自我更新模式
-	if len(os.Args) > 1 && os.Args[1] == "--self-update" {
-		if err := handleSelfUpdate(); err != nil {
-			log.Fatalf("自我更新失败: %v", err)
-		}
-		return
-	}
-
 	// 解析命令行参数
 	parseConfig, err := config.ParseConfig()
 	if err != nil {
 		log.Fatalf("参数解析失败: %v", err)
+	}
+
+	if parseConfig.TempUpdaterPath != "" {
+		if err := handleSelfUpdate(parseConfig); err != nil {
+			log.Fatalf("自我更新失败: %v", err)
+		}
+		return
+	} else {
+		time.Sleep(time.Second)
 	}
 
 	// 创建更新器实例
@@ -42,27 +44,20 @@ func main() {
 }
 
 // handleSelfUpdate 处理自我更新
-func handleSelfUpdate() error {
-	if len(os.Args) < 4 {
-		return fmt.Errorf("自我更新参数不足")
+func handleSelfUpdate(parseConfig *config.Config) error {
+
+	var args []string
+	args = append(args, config.TargetParam+"='"+parseConfig.TargetDir+"'")
+	args = append(args, config.SourceParam+"='"+parseConfig.SourceDir+"'")
+	args = append(args, config.PauseParam+"='"+parseConfig.PauseFlag+"'")
+	args = append(args, config.PidParam+"='"+parseConfig.ProcessID+"'")
+	args = append(args, config.SelfUpdateParam)
+	cmd := exec.Command("cmd", "/C", "start", "", parseConfig.TempUpdaterPath)
+	cmd.Args = append(cmd.Args, args...)
+
+	err := cmd.Start()
+	if err != nil {
+		return err
 	}
-
-	tempUpdater := os.Args[2]
-	targetUpdater := os.Args[3]
-
-	log.Printf("开始自我更新: %s -> %s", tempUpdater, targetUpdater)
-
-	// 等待原更新器退出
-	utils.WaitForProcessEnd(5000) // 等待5秒
-
-	// 复制新的更新器
-	if err := utils.CopyFile(tempUpdater, targetUpdater); err != nil {
-		return fmt.Errorf("复制更新器失败: %v", err)
-	}
-
-	// 删除临时文件
-	os.Remove(tempUpdater)
-
-	log.Println("自我更新完成")
 	return nil
 }

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -21,6 +22,23 @@ func FileExists(filePath string) bool {
 func KillProcess(pid string) error {
 	cmd := exec.Command("taskkill", "/PID", pid, "/F")
 	return cmd.Run()
+}
+
+// PidExists 指定PID是否存在
+func PidExists(pid string) bool {
+	// 构造命令：tasklist /FI "PID eq <pid>"
+	cmd := exec.Command("cmd", "/C", "tasklist", "/FI", fmt.Sprintf("PID eq %s", pid))
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return false
+	}
+
+	output := out.String()
+	// 检查输出中是否包含 pid 对应的行（排除"无任务运行..."之类的提示）
+	return strings.Contains(output, pid)
 }
 
 // CopyFile 复制单个文件
@@ -128,8 +146,24 @@ func CountFilesInDirectory(dirPath string) (int, error) {
 	return fileCount, err
 }
 
+// IsDirEmpty 是否为空目录
+func IsDirEmpty(dirPath string) bool {
+	_, err := os.Stat(dirPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true // 目录不存在
+		}
+		return false
+	}
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return false
+	}
+	return len(entries) == 0
+}
+
 // DeleteLibFiles 删除库文件
-func DeleteLibFiles(folderPath, excludePath string, logFunc func(string)) error {
+func DeleteLibFiles(folderPath string, excludeDirs []string, logFunc func(string)) error {
 	return filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -140,13 +174,13 @@ func DeleteLibFiles(folderPath, excludePath string, logFunc func(string)) error 
 			return nil
 		}
 
-		// 检查是否是库文件
-		if !isLibraryFile(info.Name()) {
-			return nil
-		}
+		//// 检查是否是库文件
+		//if !isLibraryFile(info.Name()) {
+		//	return nil
+		//}
 
 		// 检查是否需要排除
-		if shouldExclude(path, excludePath) {
+		if shouldExclude(path, excludeDirs) {
 			logFunc("跳过删除文件: " + path)
 			return nil
 		}
@@ -167,9 +201,37 @@ func isLibraryFile(filename string) bool {
 	return strings.HasSuffix(filename, ".jar") || strings.HasSuffix(filename, ".dll")
 }
 
+// getParentName 提取父目录的名称
+func getParentName(path string) string {
+	// 获取父目录路径
+	parentPath := filepath.Dir(path)
+
+	// 获取父目录的名字
+	return filepath.Base(parentPath)
+}
+
 // shouldExclude 检查是否应该排除文件
-func shouldExclude(path, excludePath string) bool {
-	return strings.Contains(path, excludePath) || strings.Contains(path, "plugin")
+func shouldExclude(path string, excludeDirs []string) bool {
+	excludeMap := make(map[string]struct{}, len(excludeDirs))
+	for _, d := range excludeDirs {
+		excludeMap[d] = struct{}{}
+	}
+
+	dir := filepath.Dir(path)
+	for {
+		base := filepath.Base(dir)
+		if _, found := excludeMap[base]; found {
+			return true
+		}
+
+		parent := filepath.Dir(dir)
+		// 到达根目录或无变化时终止
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return false
 }
 
 // UnzipFile 解压ZIP文件
@@ -189,7 +251,6 @@ func UnzipFile(zipFilePath, destination string) error {
 	// 解压每个文件
 	for _, file := range zipReader.File {
 		filePath := filepath.Join(destination, file.Name)
-
 		// 安全检查：防止路径遍历攻击
 		if !strings.HasPrefix(filePath, filepath.Clean(destination)+string(os.PathSeparator)) {
 			return fmt.Errorf("非法的文件路径: %s", file.Name)

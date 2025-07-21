@@ -49,12 +49,18 @@ func (u *Updater) Run() error {
 
 // executeUpdate 执行更新流程
 func (u *Updater) executeUpdate() error {
+	u.logger.Logf("PID: %s", u.config.ProcessID)
+	u.logger.Logf("SourceDir: %s", u.config.SourceDir)
+	u.logger.Logf("TargetDir: %s", u.config.TargetDir)
+	u.logger.Logf("PauseFlag: %s", u.config.PauseFlag)
+	u.logger.Logf("VersionZipFile: %s", u.config.VersionZipFile)
+
 	steps := []struct {
 		name string
 		fn   func() error
 	}{
 		{"关闭目标程序", u.stopTargetProgram},
-		{"删除旧依赖文件", u.cleanOldFiles},
+		{"删除旧文件", u.cleanOldFiles},
 		{"复制更新文件", u.copyUpdateFiles},
 		{"启动目标程序", u.startTargetProgram},
 		{"清理临时文件", u.cleanup},
@@ -70,13 +76,12 @@ func (u *Updater) executeUpdate() error {
 		}
 
 		u.logger.Logf("==========》%s完毕《==========", step.name)
-		progress := int((float64(i+1) / float64(totalSteps)) * 90) // 留10%给倒计时
+		progress := int((float64(i+1) / float64(totalSteps)) * 100) // 留10%给倒计时
 		u.gui.SetProgress(progress)
 	}
 
 	// 倒计时关闭
 	u.countdown()
-	u.gui.SetProgress(100)
 
 	return nil
 }
@@ -85,6 +90,11 @@ func (u *Updater) executeUpdate() error {
 func (u *Updater) stopTargetProgram() error {
 	if u.config.ProcessID == "" {
 		u.logger.Log("未指定进程ID，跳过关闭程序")
+		return nil
+	}
+
+	if !utils.PidExists(u.config.ProcessID) {
+		u.logger.Logf("指定进程ID[%s]不存在，跳过关闭程序", u.config.ProcessID)
 		return nil
 	}
 
@@ -108,10 +118,10 @@ func (u *Updater) cleanOldFiles() error {
 		return nil
 	}
 
-	excludePath := filepath.Base(u.config.SourceDir)
+	excludeDir := filepath.Base(u.config.SourceDir)
 	return utils.DeleteLibFiles(
 		u.config.TargetDir,
-		excludePath,
+		[]string{excludeDir, "plugin"},
 		func(message string) { u.logger.Log(message) },
 	)
 }
@@ -127,10 +137,12 @@ func (u *Updater) copyUpdateFiles() error {
 
 // startTargetProgram 启动目标程序
 func (u *Updater) startTargetProgram() error {
+	time.Sleep(time.Second)
 	targetExe := filepath.Join(u.config.TargetDir, config.SourceProgramName+".exe")
 
 	if !utils.FileExists(targetExe) {
-		return fmt.Errorf("启动失败，未找到%s", targetExe)
+		u.logger.Logf("启动失败，未找到%s", targetExe)
+		return nil
 	}
 
 	var args []string
@@ -140,7 +152,8 @@ func (u *Updater) startTargetProgram() error {
 
 	cmd := exec.Command(targetExe, args...)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("启动程序失败: %v", err)
+		u.logger.Logf("启动程序失败: %v", err)
+		return nil
 	}
 
 	u.logger.Logf("==========》%s启动完毕《==========", config.SourceProgramName)
@@ -161,11 +174,11 @@ func (u *Updater) cleanup() error {
 
 // countdown 倒计时关闭
 func (u *Updater) countdown() {
+	u.logger.Logf("%d秒后关闭本程序", config.DefaultCloseDelay)
 	for i := config.DefaultCloseDelay; i > 0; i-- {
 		if !u.gui.IsVisible() {
 			break
 		}
-		u.logger.Logf("%d秒后关闭本程序", i)
 		time.Sleep(time.Second)
 	}
 }

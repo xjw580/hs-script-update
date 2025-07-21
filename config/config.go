@@ -17,6 +17,11 @@ const (
 	WindowWidth       = 600
 	WindowHeight      = 400
 	DefaultCloseDelay = 10
+	SelfUpdateParam   = "-self-update"
+	TargetParam       = "--target"
+	SourceParam       = "--source"
+	PauseParam        = "--pause"
+	PidParam          = "--pid"
 )
 
 // Config 配置结构体
@@ -26,7 +31,6 @@ type Config struct {
 	PauseFlag       string // 暂停标志
 	ProcessID       string // 进程ID
 	VersionZipFile  string // 版本压缩包文件
-	NeedSelfUpdate  bool   // 是否需要自我更新
 	TempUpdaterPath string // 临时更新器路径
 }
 
@@ -44,6 +48,10 @@ func ParseConfig() (*Config, error) {
 		return nil, err
 	}
 
+	if utils.IsDirEmpty(config.SourceDir) {
+		return nil, fmt.Errorf("SourceDir [%s] 目录为空或不存在", config.SourceDir)
+	}
+
 	return config, nil
 }
 
@@ -58,13 +66,13 @@ func (c *Config) parseArgs() error {
 				value := strings.Trim(parts[1], "\"'")
 
 				switch key {
-				case "--target":
+				case TargetParam:
 					c.TargetDir = value
-				case "--source":
+				case SourceParam:
 					c.SourceDir = value
-				case "--pause":
+				case PauseParam:
 					c.PauseFlag = value
-				case "--pid":
+				case PidParam:
 					c.ProcessID = value
 				}
 			}
@@ -94,26 +102,37 @@ func (c *Config) autoDetect() error {
 	}
 
 	// 检查是否需要自我更新
-	c.checkSelfUpdate()
+	err = c.checkSelfUpdate()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
 // checkSelfUpdate 检查是否需要自我更新
-func (c *Config) checkSelfUpdate() {
-	executable, _ := os.Executable()
-	currentUpdater := filepath.Base(executable)
-
-	// 检查源目录中是否有新的更新器
-	newUpdaterPath := filepath.Join(c.SourceDir, UpdaterName)
-	if utils.FileExists(newUpdaterPath) {
-		// 比较文件时间或版本
-		if c.isUpdaterNewer(newUpdaterPath, executable) {
-			c.NeedSelfUpdate = true
-			// 创建临时更新器路径
-			c.TempUpdaterPath = filepath.Join(c.TargetDir, currentUpdater+TempUpdaterSuffix)
+func (c *Config) checkSelfUpdate() error {
+	var selfUpdate = false
+	for _, arg := range os.Args {
+		if arg == SelfUpdateParam {
+			selfUpdate = true
 		}
 	}
+	if !selfUpdate {
+		// 检查源目录中是否有新的更新器
+		newUpdaterPath := filepath.Join(c.SourceDir, UpdaterName)
+		if utils.FileExists(newUpdaterPath) {
+			c.TempUpdaterPath = filepath.Join(os.TempDir(), SourceProgramName, UpdaterName)
+			// 创建临时更新器路径
+			if err := utils.CopyFile(newUpdaterPath, c.TempUpdaterPath); err != nil {
+				return fmt.Errorf("复制更新器失败: %v", err)
+			}
+		} else {
+			return fmt.Errorf("找不到更新器%s", newUpdaterPath)
+		}
+	}
+
+	return nil
 }
 
 // isUpdaterNewer 检查新更新器是否更新
@@ -133,10 +152,12 @@ func (c *Config) detectSourceDir(currentDir string) error {
 	versionDir := filepath.Join(currentDir, DefaultVersionDir)
 
 	// 检查版本目录中的最新子目录
-	if newestDir := getNewestSubdirectory(versionDir); newestDir != "" {
-		c.SourceDir = newestDir
-		return nil
-	}
+	//if newestDir := getNewestSubdirectory(versionDir); newestDir != "" {
+	//	c.SourceDir = newestDir
+	//	return nil
+	//}
+
+	c.SourceDir = versionDir
 
 	// 查找zip文件
 	zipFile, err := c.findZipFile(currentDir)
@@ -177,9 +198,10 @@ func (c *Config) findZipFile(dir string) (string, error) {
 // extractZipFile 解压zip文件
 func (c *Config) extractZipFile(currentDir, versionDir, zipFile string) error {
 	zipFilePath := filepath.Join(currentDir, zipFile)
-	fileName := filepath.Base(zipFilePath)
-	nameWithoutExt := strings.TrimSuffix(fileName, filepath.Ext(fileName))
-	c.SourceDir = filepath.Join(versionDir, nameWithoutExt)
+	//fileName := filepath.Base(zipFilePath)
+	//nameWithoutExt := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	//c.SourceDir = filepath.Join(versionDir, nameWithoutExt)
+	c.SourceDir = versionDir
 
 	return utils.UnzipFile(zipFilePath, c.SourceDir)
 }
