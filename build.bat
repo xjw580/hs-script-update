@@ -1,1 +1,1 @@
-go build  -o update.exe
+go build -ldflags="-s -w -H=windowsgui"  -o update.exe
