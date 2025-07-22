@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -150,8 +151,14 @@ func (u *Updater) startTargetProgram() error {
 		args = append(args, "--pause="+u.config.PauseFlag)
 	}
 
-	cmd := exec.Command(targetExe, args...)
-	if err := cmd.Start(); err != nil {
+	cmd := exec.Command("cmd", "/C", "start", "", targetExe)
+	cmd.Args = append(cmd.Args, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow: true,
+	}
+
+	err := cmd.Start()
+	if err != nil {
 		u.logger.Logf("启动程序失败: %v", err)
 		return nil
 	}

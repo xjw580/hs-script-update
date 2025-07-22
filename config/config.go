@@ -9,19 +9,20 @@ import (
 )
 
 const (
-	SourceProgramName = "hs-script"
-	UpdaterName       = "update.exe"
-	ProgramName       = SourceProgramName + "更新程序"
-	DefaultVersionDir = "new_version_temp"
-	TempUpdaterSuffix = ".temp"
-	WindowWidth       = 600
-	WindowHeight      = 400
-	DefaultCloseDelay = 10
-	SelfUpdateParam   = "-self-update"
-	TargetParam       = "--target"
-	SourceParam       = "--source"
-	PauseParam        = "--pause"
-	PidParam          = "--pid"
+	SourceProgramName   = "hs-script"
+	UpdaterName         = "update.exe"
+	ProgramName         = SourceProgramName + "更新程序"
+	DefaultVersionDir   = "new_version_temp"
+	TempUpdaterSuffix   = ".temp"
+	WindowWidth         = 600
+	WindowHeight        = 400
+	DefaultCloseDelay   = 10
+	SelfUpdateParam     = "-self-update"
+	TargetParam         = "--target"
+	SourceParam         = "--source"
+	PauseParam          = "--pause"
+	PidParam            = "--pid"
+	VersionZipFileParam = "--version-file"
 )
 
 // Config 配置结构体
@@ -74,6 +75,8 @@ func (c *Config) parseArgs() error {
 					c.PauseFlag = value
 				case PidParam:
 					c.ProcessID = value
+				case VersionZipFileParam:
+					c.VersionZipFile = value
 				}
 			}
 		}
@@ -159,16 +162,20 @@ func (c *Config) detectSourceDir(currentDir string) error {
 
 	c.SourceDir = versionDir
 
-	// 查找zip文件
-	zipFile, err := c.findZipFile(currentDir)
-	if err != nil {
-		return err
+	var zipFilePath string
+	if c.VersionZipFile == "" {
+		// 查找zip文件
+		zipFile, err := c.findZipFile(currentDir)
+		if err != nil {
+			return err
+		}
+		zipFilePath = zipFile
+		c.VersionZipFile = zipFilePath
 	}
 
-	if zipFile != "" {
-		c.VersionZipFile = zipFile
+	if zipFilePath != "" {
 		// 解压zip文件
-		return c.extractZipFile(currentDir, versionDir, zipFile)
+		return c.extractZipFile(currentDir, versionDir, zipFilePath)
 	}
 
 	return fmt.Errorf("未找到有效的源目录或zip文件")

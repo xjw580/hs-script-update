@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
+	"github.com/lxn/walk"
+	"golang.org/x/sys/windows"
 	"io"
 	"os"
 	"os/exec"
@@ -11,6 +13,21 @@ import (
 	"strings"
 	"time"
 )
+
+var (
+	User32           = windows.NewLazySystemDLL("User32.dll")
+	SendMessageW     = User32.NewProc("SendMessageW")
+	GetSystemMetrics = User32.NewProc(`GetSystemMetrics`)
+)
+
+const (
+	EM_LIMITTEXT = 0x00C5
+)
+
+func SetTextEditLimit(textEdit *walk.TextEdit, limit int) {
+	hwnd := textEdit.Handle()
+	SendMessageW.Call(uintptr(hwnd), EM_LIMITTEXT, uintptr(limit), 0)
+}
 
 // FileExists 检查文件是否存在
 func FileExists(filePath string) bool {

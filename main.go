@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 )
 
@@ -51,9 +52,13 @@ func handleSelfUpdate(parseConfig *config.Config) error {
 	args = append(args, config.SourceParam+"='"+parseConfig.SourceDir+"'")
 	args = append(args, config.PauseParam+"='"+parseConfig.PauseFlag+"'")
 	args = append(args, config.PidParam+"='"+parseConfig.ProcessID+"'")
+	args = append(args, config.VersionZipFileParam+"='"+parseConfig.VersionZipFile+"'")
 	args = append(args, config.SelfUpdateParam)
 	cmd := exec.Command("cmd", "/C", "start", "", parseConfig.TempUpdaterPath)
 	cmd.Args = append(cmd.Args, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow: true,
+	}
 
 	err := cmd.Start()
 	if err != nil {

@@ -2,12 +2,11 @@ package gui
 
 import (
 	"fmt"
-	"hs-script-update/config"
-	"log"
-	"syscall"
-
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
+	"hs-script-update/config"
+	"hs-script-update/utils"
+	"log"
 )
 
 // GUI 图形界面结构体
@@ -70,7 +69,7 @@ func (g *GUI) createWindow(updateFunc func() error) {
 			},
 		},
 	}.Create()
-
+	utils.SetTextEditLimit(g.logTextEdit, 1024*1024*10)
 	if err != nil {
 		log.Printf("创建窗口失败: %v", err)
 		g.statusChan <- err
@@ -123,12 +122,12 @@ func (g *GUI) IsVisible() bool {
 
 // getDisplayWidth 获取显示器宽度
 func (g *GUI) getDisplayWidth() uintptr {
-	w, _, _ := syscall.NewLazyDLL(`User32.dll`).NewProc(`GetSystemMetrics`).Call(uintptr(0))
+	w, _, _ := utils.GetSystemMetrics.Call(uintptr(0))
 	return w
 }
 
 // getDisplayHeight 获取显示器高度
 func (g *GUI) getDisplayHeight() uintptr {
-	h, _, _ := syscall.NewLazyDLL(`User32.dll`).NewProc(`GetSystemMetrics`).Call(uintptr(1))
+	h, _, _ := utils.GetSystemMetrics.Call(uintptr(1))
 	return h
 }
