@@ -89,9 +89,20 @@ func (u *Updater) executeUpdate() error {
 
 // stopTargetProgram 停止目标程序
 func (u *Updater) stopTargetProgram() error {
-	if u.config.ProcessID == "" {
-		u.logger.Log("未指定进程ID，跳过关闭程序")
-		return nil
+	killer := utils.NewProcessKiller()
+	var platformName = "Battle.net.exe"
+	var gameName = "Hearthstone.exe"
+	if killer.IsProcessRunning(gameName) {
+		err := killer.ForceKillProcessByName(gameName)
+		if err != nil {
+			u.logger.Logf("关闭%s失败: %v", gameName, err)
+		}
+	}
+	if killer.IsProcessRunning(platformName) {
+		err := killer.ForceKillProcessByName(platformName)
+		if err != nil {
+			u.logger.Logf("关闭%s失败: %v", platformName, err)
+		}
 	}
 
 	if !utils.PidExists(u.config.ProcessID) {
@@ -122,7 +133,7 @@ func (u *Updater) cleanOldFiles() error {
 	excludeDir := filepath.Base(u.config.SourceDir)
 	return utils.DeleteLibFiles(
 		u.config.TargetDir,
-		[]string{excludeDir, "plugin"},
+		[]string{excludeDir, "plugin", "config", "data", "log"},
 		func(message string) { u.logger.Log(message) },
 	)
 }

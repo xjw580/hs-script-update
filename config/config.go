@@ -162,20 +162,20 @@ func (c *Config) detectSourceDir(currentDir string) error {
 
 	c.SourceDir = versionDir
 
-	var zipFilePath string
+	var zipFileName string
 	if c.VersionZipFile == "" {
 		// 查找zip文件
 		zipFile, err := c.findZipFile(currentDir)
 		if err != nil {
 			return err
 		}
-		zipFilePath = zipFile
-		c.VersionZipFile = zipFilePath
+		zipFileName = zipFile
+		c.VersionZipFile = zipFileName
 	}
 
-	if zipFilePath != "" {
+	if zipFileName != "" {
 		// 解压zip文件
-		return c.extractZipFile(currentDir, versionDir, zipFilePath)
+		return c.extractZipFile(currentDir, versionDir, zipFileName)
 	}
 
 	return fmt.Errorf("未找到有效的源目录或zip文件")

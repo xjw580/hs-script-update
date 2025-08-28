@@ -7,9 +7,12 @@ import (
 	"github.com/lxn/walk"
 	"golang.org/x/sys/windows"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -360,4 +363,286 @@ func GetProcessesByName(processName string) ([]string, error) {
 	}
 
 	return pids, nil
+}
+
+// ProcessKiller 进程终止器
+type ProcessKiller struct {
+	logger *log.Logger
+}
+
+// NewProcessKiller 创建新的进程终止器
+func NewProcessKiller() *ProcessKiller {
+	return &ProcessKiller{
+		logger: log.New(os.Stdout, "[ProcessKiller] ", log.LstdFlags),
+	}
+}
+
+// ProcessInfo 进程信息
+type ProcessInfo struct {
+	PID  int    `json:"pid"`
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+// KillProcessByName 根据进程名杀死进程
+func (pk *ProcessKiller) KillProcessByName(processName string) error {
+	switch runtime.GOOS {
+	case "windows":
+		return pk.killProcessWindows(processName)
+	case "linux", "darwin":
+		return pk.killProcessUnix(processName)
+	default:
+		return fmt.Errorf("不支持的操作系统: %s", runtime.GOOS)
+	}
+}
+
+// killProcessWindows Windows 系统杀死进程
+func (pk *ProcessKiller) killProcessWindows(processName string) error {
+	// 方法1: 使用 taskkill 命令（推荐）
+	err := pk.killByTaskkill(processName)
+	if err == nil {
+		pk.logger.Printf("使用 taskkill 成功杀死进程: %s", processName)
+		return nil
+	}
+
+	pk.logger.Printf("taskkill 失败，尝试备用方法: %v", err)
+
+	// 方法2: 获取进程列表后逐个杀死
+	return pk.killByProcessList(processName)
+}
+
+// killByTaskkill 使用 taskkill 命令
+func (pk *ProcessKiller) killByTaskkill(processName string) error {
+	// 确保进程名包含 .exe 后缀
+	if !strings.HasSuffix(strings.ToLower(processName), ".exe") {
+		processName += ".exe"
+	}
+
+	// 使用 taskkill /f /im 强制杀死进程
+	cmd := exec.Command("taskkill", "/f", "/im", processName)
+	output, err := cmd.CombinedOutput()
+
+	pk.logger.Printf("taskkill 输出: %s", string(output))
+
+	if err != nil {
+		return fmt.Errorf("taskkill 执行失败: %v, 输出: %s", err, string(output))
+	}
+
+	// 检查输出是否表示成功
+	outputStr := string(output)
+	if strings.Contains(outputStr, "成功") || strings.Contains(outputStr, "SUCCESS") {
+		return nil
+	}
+
+	return fmt.Errorf("taskkill 未找到进程或执行失败: %s", outputStr)
+}
+
+// killByProcessList 通过进程列表查找并杀死
+func (pk *ProcessKiller) killByProcessList(processName string) error {
+	processes, err := pk.getWindowsProcesses(processName)
+	if err != nil {
+		return fmt.Errorf("获取进程列表失败: %v", err)
+	}
+
+	if len(processes) == 0 {
+		return fmt.Errorf("未找到进程: %s", processName)
+	}
+
+	var lastError error
+	killedCount := 0
+
+	for _, proc := range processes {
+		err := pk.killProcessByPID(proc.PID)
+		if err != nil {
+			pk.logger.Printf("杀死进程 %d (%s) 失败: %v", proc.PID, proc.Name, err)
+			lastError = err
+		} else {
+			pk.logger.Printf("成功杀死进程: PID=%d, Name=%s", proc.PID, proc.Name)
+			killedCount++
+		}
+	}
+
+	if killedCount == 0 {
+		return fmt.Errorf("所有进程杀死都失败，最后错误: %v", lastError)
+	}
+
+	pk.logger.Printf("成功杀死 %d/%d 个进程", killedCount, len(processes))
+	return nil
+}
+
+// getWindowsProcesses 获取 Windows 进程列表
+func (pk *ProcessKiller) getWindowsProcesses(processName string) ([]ProcessInfo, error) {
+	// 使用 wmic 获取进程信息
+	cmd := exec.Command("wmic", "process", "where", fmt.Sprintf("name='%s'", processName),
+		"get", "processid,name,executablepath", "/format:csv")
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("执行 wmic 命令失败: %v", err)
+	}
+
+	return pk.parseWmicOutput(string(output))
+}
+
+// parseWmicOutput 解析 wmic 输出
+func (pk *ProcessKiller) parseWmicOutput(output string) ([]ProcessInfo, error) {
+	lines := strings.Split(output, "\n")
+	var processes []ProcessInfo
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Node") || strings.HasPrefix(line, "ExecutablePath") {
+			continue
+		}
+
+		// CSV 格式: Node,ExecutablePath,Name,ProcessId
+		parts := strings.Split(line, ",")
+		if len(parts) >= 4 {
+			pidStr := strings.TrimSpace(parts[3])
+			if pid, err := strconv.Atoi(pidStr); err == nil {
+				processes = append(processes, ProcessInfo{
+					PID:  pid,
+					Name: strings.TrimSpace(parts[2]),
+					Path: strings.TrimSpace(parts[1]),
+				})
+			}
+		}
+	}
+
+	return processes, nil
+}
+
+// killProcessUnix Unix/Linux 系统杀死进程
+func (pk *ProcessKiller) killProcessUnix(processName string) error {
+	// 使用 pkill 命令
+	cmd := exec.Command("pkill", "-f", processName)
+	output, err := cmd.CombinedOutput()
+
+	pk.logger.Printf("pkill 输出: %s", string(output))
+
+	if err != nil {
+		// pkill 没找到进程时也会返回错误，需要检查具体错误
+		if exitError, ok := err.(*exec.ExitError); ok {
+			if exitError.ExitCode() == 1 {
+				return fmt.Errorf("未找到进程: %s", processName)
+			}
+		}
+		return fmt.Errorf("pkill 执行失败: %v", err)
+	}
+
+	pk.logger.Printf("成功杀死进程: %s", processName)
+	return nil
+}
+
+// killProcessByPID 根据 PID 杀死进程
+func (pk *ProcessKiller) killProcessByPID(pid int) error {
+	cmd := exec.Command("taskkill", "/f", "/pid", strconv.Itoa(pid))
+	_, err := cmd.Output()
+	return err
+}
+
+// ForceKillProcessByName 强制杀死进程（不可恢复）
+func (pk *ProcessKiller) ForceKillProcessByName(processName string) error {
+	switch runtime.GOOS {
+	case "windows":
+		return pk.forceKillWindows(processName)
+	case "linux", "darwin":
+		return pk.forceKillUnix(processName)
+	default:
+		return fmt.Errorf("不支持的操作系统: %s", runtime.GOOS)
+	}
+}
+
+// forceKillWindows Windows 强制杀死
+func (pk *ProcessKiller) forceKillWindows(processName string) error {
+	if !strings.HasSuffix(strings.ToLower(processName), ".exe") {
+		processName += ".exe"
+	}
+
+	// 使用 /f 参数强制终止
+	cmd := exec.Command("taskkill", "/f", "/im", processName, "/t")
+	output, err := cmd.CombinedOutput()
+
+	pk.logger.Printf("强制杀死输出: %s", string(output))
+	return err
+}
+
+// forceKillUnix Unix 强制杀死
+func (pk *ProcessKiller) forceKillUnix(processName string) error {
+	// 使用 SIGKILL 信号强制终止
+	cmd := exec.Command("pkill", "-9", "-f", processName)
+	output, err := cmd.CombinedOutput()
+
+	pk.logger.Printf("强制杀死输出: %s", string(output))
+	return err
+}
+
+// GetProcessesByName 根据进程名获取进程列表
+func (pk *ProcessKiller) GetProcessesByName(processName string) ([]ProcessInfo, error) {
+	switch runtime.GOOS {
+	case "windows":
+		return pk.getWindowsProcesses(processName)
+	case "linux", "darwin":
+		return pk.getUnixProcesses(processName)
+	default:
+		return nil, fmt.Errorf("不支持的操作系统: %s", runtime.GOOS)
+	}
+}
+
+// getUnixProcesses 获取 Unix 进程列表
+func (pk *ProcessKiller) getUnixProcesses(processName string) ([]ProcessInfo, error) {
+	cmd := exec.Command("pgrep", "-f", processName)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("pgrep 执行失败: %v", err)
+	}
+
+	var processes []ProcessInfo
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+
+	for _, line := range lines {
+		if pid, err := strconv.Atoi(strings.TrimSpace(line)); err == nil {
+			processes = append(processes, ProcessInfo{
+				PID:  pid,
+				Name: processName,
+				Path: "", // pgrep 不返回路径
+			})
+		}
+	}
+
+	return processes, nil
+}
+
+// IsProcessRunning 检查进程是否正在运行
+func (pk *ProcessKiller) IsProcessRunning(processName string) bool {
+	processes, err := pk.GetProcessesByName(processName)
+	if err != nil {
+		pk.logger.Printf("检查进程状态失败: %v", err)
+		return false
+	}
+	return len(processes) > 0
+}
+
+// KillAllProcessesByName 杀死所有匹配的进程
+func (pk *ProcessKiller) KillAllProcessesByName(processName string) (int, error) {
+	processes, err := pk.GetProcessesByName(processName)
+	if err != nil {
+		return 0, err
+	}
+
+	if len(processes) == 0 {
+		return 0, fmt.Errorf("未找到进程: %s", processName)
+	}
+
+	killedCount := 0
+	for _, proc := range processes {
+		if err := pk.killProcessByPID(proc.PID); err == nil {
+			killedCount++
+			pk.logger.Printf("杀死进程: PID=%d", proc.PID)
+		} else {
+			pk.logger.Printf("杀死进程 %d 失败: %v", proc.PID, err)
+		}
+	}
+
+	return killedCount, nil
 }
