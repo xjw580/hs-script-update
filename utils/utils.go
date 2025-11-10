@@ -4,8 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
-	"github.com/lxn/walk"
-	"golang.org/x/sys/windows"
 	"io"
 	"log"
 	"os"
@@ -15,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lxn/walk"
+	"golang.org/x/sys/windows"
 )
 
 var (
@@ -203,6 +204,37 @@ func DeleteLibFiles(folderPath string, excludeDirs []string, logFunc func(string
 		if shouldExclude(path, excludeDirs) {
 			logFunc("跳过删除文件: " + path)
 			return nil
+		}
+
+		// 删除文件
+		if err := os.Remove(path); err != nil {
+			logFunc(fmt.Sprintf("删除文件失败 %s: %v", path, err))
+			return err
+		}
+
+		logFunc("删除文件: " + path)
+		return nil
+	})
+}
+
+func DeletePluginFiles(folderPath string, whitelistFileName []string, logFunc func(string)) error {
+	return filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// 只处理文件
+		if info.IsDir() {
+			return nil
+		}
+
+		// 检查是否在白名单中(包含匹配)
+		fileName := info.Name()
+		for _, whiteFile := range whitelistFileName {
+			if strings.Contains(fileName, whiteFile) {
+				logFunc("跳过删除文件(白名单): " + path)
+				return nil
+			}
 		}
 
 		// 删除文件

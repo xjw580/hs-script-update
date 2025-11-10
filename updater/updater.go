@@ -131,11 +131,20 @@ func (u *Updater) cleanOldFiles() error {
 	}
 
 	excludeDir := filepath.Base(u.config.SourceDir)
-	return utils.DeleteLibFiles(
+
+	err := utils.DeleteLibFiles(
 		u.config.TargetDir,
 		[]string{excludeDir, "plugin", "config", "data", "log"},
 		func(message string) { u.logger.Log(message) },
 	)
+	if err != nil {
+		return utils.DeletePluginFiles(
+			filepath.Join(u.config.TargetDir, "plugin"),
+			[]string{"hs-script-base-card-plugin", "hs-script-base-strategy-plugin"},
+			func(message string) { u.logger.Log(message) },
+		)
+	}
+	return nil
 }
 
 // copyUpdateFiles 复制更新文件
