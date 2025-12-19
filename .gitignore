@@ -30,3 +30,5 @@ update.exe
 *.xml
 *.json
 /easy-release_static/*.json
+
+/bin
