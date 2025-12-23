@@ -71,14 +71,49 @@ func CopyFile(src, dst string) error {
 		return err
 	}
 
+	// 尝试创建目标文件
 	destFile, err := os.Create(dst)
 	if err != nil {
-		return err
+		// 检查是否是文件被占用的错误
+		if isFileInUseError(err) && Exists(dst) {
+			fmt.Printf("检测到文件被占用: %s\n", dst)
+			// 处理文件占用
+			canProceed, handleErr := HandleLockedFile(dst)
+			if handleErr != nil {
+				return fmt.Errorf("处理文件占用失败: %w", handleErr)
+			}
+			if !canProceed {
+				// 用户选择跳过此文件
+				fmt.Printf("跳过文件: %s\n", dst)
+				return nil
+			}
+
+			// 重试创建文件
+			destFile, err = os.Create(dst)
+			if err != nil {
+				return fmt.Errorf("处理占用后仍无法创建文件: %w", err)
+			}
+		} else {
+			return err
+		}
 	}
 	defer destFile.Close()
 
 	_, err = io.Copy(destFile, sourceFile)
 	return err
+}
+
+// isFileInUseError 检查错误是否是文件被占用的错误
+func isFileInUseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Windows: "The process cannot access the file because it is being used by another process."
+	// 检查错误信息中是否包含相关关键字
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "being used by another process") ||
+		strings.Contains(errMsg, "used by another process") ||
+		strings.Contains(errMsg, "access is denied")
 }
 
 // isCurrentProcess 检查文件是否是当前正在运行的进程

@@ -55,3 +55,5 @@ echo %GREEN%Output: %OUTPUT_EXE%%RESET%
 echo %GREEN%======================================%RESET%
 
 endlocal
+
+pause

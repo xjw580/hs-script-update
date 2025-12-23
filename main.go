@@ -6,10 +6,12 @@ import (
 	"os"
 
 	"club.xiaojiawei/hs-script-update/internal/core"
+	"club.xiaojiawei/hs-script-update/internal/gui"
 	"club.xiaojiawei/hs-script-update/internal/repository"
+	"club.xiaojiawei/hs-script-update/internal/utils"
 )
 
-const version = "1.0.0"
+const version = "1.0.1"
 
 func main() {
 	helpFlag := flag.Bool("help", false, "显示帮助信息")
@@ -17,6 +19,12 @@ func main() {
 	updateCmd := flag.NewFlagSet("update", flag.ExitOnError)
 	checkCmd := flag.NewFlagSet("check", flag.ExitOnError)
 	latestCmd := flag.NewFlagSet("latest", flag.ExitOnError)
+
+	// update 命令的参数
+	updatePause := updateCmd.Bool("pause", false, "主程序是否处于暂停状态")
+	updatePid := updateCmd.Int("pid", 0, "主程序进程 PID（等待其退出后再更新）")
+	updateMainProgram := updateCmd.String("main-program", "", "主程序路径（更新完成后启动）")
+	updateNoGUI := updateCmd.Bool("nogui", false, "使用 GUI 界面显示更新进度")
 
 	checkDev := checkCmd.Bool("d", false, "检查开发版")
 	checkNative := checkCmd.Bool("n", false, "Native 版本")
@@ -46,12 +54,12 @@ func main() {
 		updateCmd.Parse(os.Args[2:])
 		if updateCmd.NArg() < 2 {
 			fmt.Println("错误: update 命令需要两个参数")
-			fmt.Println("使用方法: hs-script-updater update <zipPath> <targetDir>")
+			fmt.Println("使用方法: hs-script-updater update <zipPath> <targetDir> [--pause] [--pid=<pid>] [--main-program=<path>] [--gui]")
 			os.Exit(1)
 		}
 		zipPath := updateCmd.Arg(0)
 		targetDir := updateCmd.Arg(1)
-		handleUpdate(zipPath, targetDir)
+		handleUpdate(zipPath, targetDir, *updatePause, *updatePid, *updateMainProgram, !(*updateNoGUI))
 
 	case "check":
 		checkCmd.Parse(os.Args[2:])
@@ -78,9 +86,39 @@ func main() {
 }
 
 // handleUpdate 处理更新命令
-func handleUpdate(zipPath, targetDir string) {
-	updater := core.NewUpdater(zipPath, targetDir)
+func handleUpdate(zipPath, targetDir string, pause bool, pid int, mainProgram string, useGUI bool) {
+	updater := core.NewUpdater(zipPath, targetDir, pause, pid, mainProgram)
+
+	if useGUI {
+		// GUI 模式
+		window := gui.NewUpdaterWindow()
+		if err := window.Show(); err != nil {
+			fmt.Printf("创建 GUI 窗口失败: %v\n", err)
+			fmt.Println("回退到控制台模式...")
+			useGUI = false
+		} else {
+			// 设置进度回调
+			updater.SetProgressCallback(window)
+
+			// 在后台执行更新
+			go func() {
+				if err := updater.Update(); err != nil {
+					errorMsg := fmt.Sprintf("更新失败:\n\n%v", err)
+					window.ShowError(errorMsg)
+					fmt.Printf("\n更新失败: %v\n", err)
+				}
+			}()
+
+			// 运行 GUI 消息循环
+			window.Run()
+			return
+		}
+	}
+
+	// 控制台模式
 	if err := updater.Update(); err != nil {
+		errorMsg := fmt.Sprintf("更新失败:\n\n%v", err)
+		utils.ShowErrorBox(errorMsg, "更新失败")
 		fmt.Printf("\n更新失败: %v\n", err)
 		os.Exit(1)
 	}
@@ -141,13 +179,19 @@ func showHelp() {
   hs-script-updater <command> [arguments]
 
 命令:
-  update <zipPath> <targetDir>              执行更新
+  update <zipPath> <targetDir> [options]    执行更新
   check <version> [-d] [-n] [-i] [-r repo]  检查版本更新（需要当前版本号）
   latest [-d] [-n] [-i] [-r repo]           获取最新版本信息
 
 示例:
   # 执行更新
   hs-script-updater update "D:\hs-script_v4.13.0-GA.zip" "D:\hs-script"
+
+  # 执行更新（使用 GUI 界面）
+  hs-script-updater update "D:\hs-script_v4.13.0-GA.zip" "D:\hs-script" --gui
+
+  # 执行更新（等待主程序退出，更新后自动启动）
+  hs-script-updater update "D:\hs-script_v4.13.0-GA.zip" "D:\hs-script" --pid=12345 --pause --main-program="D:\hs-script\hs-script.exe"
 
   # 获取最新 JVM 版本（返回 JSON，默认 Gitee）
   hs-script-updater latest
@@ -176,11 +220,19 @@ func showHelp() {
   # 检查更新（交互模式）
   hs-script-updater check "v4.13.0-GA" -i
 
-选项:
-  -d, --dev            检查/获取开发版
-  -n, --native         Native 版本（默认为 JVM 版本）
-  -i, --interactive    交互模式（控制台显示）
-  -r, --repo           仓库源 (gitee/github，默认 gitee)
-  -h, --help           显示帮助信息
+update 命令选项:
+  --pid=<pid>                  主程序进程 PID（等待其退出后再更新）
+  --pause                      主程序是否处于暂停状态
+  --main-program=<path>        主程序路径（更新完成后自动启动）
+  --gui                        使用 GUI 界面显示更新进度
+
+check/latest 命令选项:
+  -d, --dev                    检查/获取开发版
+  -n, --native                 Native 版本（默认为 JVM 版本）
+  -i, --interactive            交互模式（控制台显示）
+  -r, --repo                   仓库源 (gitee/github，默认 gitee)
+
+通用选项:
+  -h, --help                   显示帮助信息
 `, version)
 }
